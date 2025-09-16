@@ -1,9 +1,9 @@
 # 名称: 直连修正
 payload:
+  - DOMAIN-SUFFIX,snssdk.com
   - DOMAIN-SUFFIX,990126.xyz
   - DOMAIN-SUFFIX,micu.hk
   - DOMAIN-SUFFIX,mimiu.chat
   - DOMAIN-SUFFIX,vo0.site
   - DOMAIN-SUFFIX,tgpro.top
   - DOMAIN-SUFFIX,wanwanapp.com
-  - DOMAIN-SUFFIX,snssdk.com
