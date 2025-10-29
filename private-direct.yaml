@@ -13,3 +13,5 @@ payload:
   - DOMAIN-SUFFIX,ipip.net
   - DOMAIN-SUFFIX,ipw.cn
   - DOMAIN-SUFFIX,666666.host
+  - DOMAIN-SUFFIX,tailscale.com
+  - DOMAIN-SUFFIX,ts.net
