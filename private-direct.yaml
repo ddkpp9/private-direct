@@ -15,3 +15,4 @@ payload:
   - DOMAIN-SUFFIX,666666.host
   - DOMAIN-SUFFIX,tailscale.com
   - DOMAIN-SUFFIX,ts.net
+  - DOMAIN-SUFFIX,ddkpp.top
