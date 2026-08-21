@@ -1,0 +1,39 @@
+name: "服务器监控（私钥修复版）"
+description: "通过 SSH 获取 Linux 服务器状态；修复私钥换行、加密私钥口令及默认用户名问题"
+author: "egerndaddy（私钥兼容修复：ddkpp9）"
+homepage: "https://github.com/ddkpp9/private-direct/tree/main/modules"
+
+env_schema:
+  host:
+    name: 主机地址
+    description: SSH 服务器地址
+    default_value: ""
+  port:
+    name: 端口
+    description: SSH 端口号
+    default_value: "22"
+  username:
+    name: 用户名
+    description: SSH 登录用户名（留空时使用 root）
+    default_value: "root"
+  password:
+    name: 密码
+    description: "SSH 密码（与私钥二选一）"
+    default_value: ""
+  privateKey:
+    name: 私钥
+    description: '粘贴完整私钥内容（包含 BEGIN/END），支持换行或 \n；不要填写 .pub 公钥或文件路径'
+    default_value: ""
+  passphrase:
+    name: 私钥口令
+    description: "仅加密私钥需要填写，未加密私钥请留空"
+    default_value: ""
+
+scriptings:
+- generic:
+    name: 服务器监控（私钥修复版）
+    script_url: https://raw.githubusercontent.com/ddkpp9/private-direct/main/modules/server-monitor.js
+
+widgets:
+- name: 服务器监控（私钥修复版）
+  script_name: 服务器监控（私钥修复版）
