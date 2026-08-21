@@ -32,7 +32,7 @@ env_schema:
 scriptings:
 - generic:
     name: 服务器监控（私钥修复版）
-    script_url: https://raw.githubusercontent.com/ddkpp9/private-direct/main/modules/server-monitor.js
+    script_url: https://raw.githubusercontent.com/ddkpp9/private-direct/610caeaa322b20b28a5d86e1510eb6657e7cf404/modules/server-monitor.js
 
 widgets:
 - name: 服务器监控（私钥修复版）
