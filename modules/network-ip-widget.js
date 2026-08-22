@@ -1,5 +1,5 @@
 // Egern Network Exit Widget
-// Shows DIRECT and current-policy public IPv4/IPv6 plus the active interface.
+// Shows DIRECT and current-policy public IPv4/IPv6 plus active-interface IPv4.
 
 const C = {
   bg1: '#0d1117',
@@ -43,6 +43,11 @@ const COUNTRY_NAMES = {
 
 const GEO_CACHE_KEY = 'network-ip-widget:geo-cache-v1';
 const GEO_CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
+const PREFETCH_CACHE_KEY = 'network-ip-widget:network-prefetch-v1';
+const PREFETCH_LOCK_KEY = 'network-ip-widget:network-prefetch-lock-v1';
+const LAST_WIDGET_NETWORK_KEY = 'network-ip-widget:last-widget-network-v1';
+const PREFETCH_TTL = 15 * 60 * 1000;
+const PREFETCH_DEBOUNCE = 30 * 1000;
 const REQUEST_HEADERS = {
   'User-Agent': 'Egern-Network-IP-Widget/1.0',
   'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -54,10 +59,63 @@ export default async function (ctx) {
   const proxyPolicy = clean(env.proxyPolicy || env.PROXY_POLICY || env.POLICY);
   const refreshMinutes = boundedInt(
     env.refreshMinutes || env.REFRESH_MINUTES,
-    10,
+    60,
     5,
     120,
   );
+
+  // The same file is registered as both a widget script and a network-change
+  // script. Network events cannot force WidgetKit to redraw, but they can warm
+  // a fresh snapshot so the next system/manual widget run is immediate.
+  if (!ctx.widgetFamily) {
+    await prefetchOnNetworkChange(ctx, proxyPolicy);
+    return;
+  }
+
+  const currentNetwork = readNetwork(ctx);
+  const fingerprint = networkFingerprint(currentNetwork);
+  const prefetched = readJSON(ctx, PREFETCH_CACHE_KEY);
+  const lastWidgetNetwork = readJSON(ctx, LAST_WIDGET_NETWORK_KEY);
+  const canUsePrefetch = prefetched
+    && prefetched.snapshot
+    && prefetched.proxyPolicy === proxyPolicy
+    && prefetched.fingerprint === fingerprint
+    && (!lastWidgetNetwork || lastWidgetNetwork.fingerprint !== fingerprint)
+    && Date.now() - Number(prefetched.at || 0) < PREFETCH_TTL;
+
+  const snapshot = canUsePrefetch
+    ? prefetched.snapshot
+    : await collectSnapshot(ctx, proxyPolicy);
+
+  writeJSON(ctx, LAST_WIDGET_NETWORK_KEY, {
+    at: Date.now(),
+    fingerprint,
+  });
+
+  const model = {
+    ...snapshot,
+    refreshAfter: new Date(Date.now() + refreshMinutes * 60 * 1000).toISOString(),
+  };
+
+  switch (ctx.widgetFamily) {
+    case 'accessoryInline':
+      return renderInline(model);
+    case 'accessoryCircular':
+      return renderCircular(model);
+    case 'accessoryRectangular':
+      return renderRectangular(model);
+    case 'systemSmall':
+      return renderSmall(model);
+    case 'systemLarge':
+    case 'systemExtraLarge':
+      return renderLarge(model);
+    case 'systemMedium':
+    default:
+      return renderMedium(model);
+  }
+}
+
+async function collectSnapshot(ctx, proxyPolicy) {
 
   const [direct4, direct6, proxy4, proxy6] = await Promise.all([
     probePublicIp(ctx, 4, 'DIRECT'),
@@ -77,7 +135,7 @@ export default async function (ctx) {
     geo: probe.ok ? geoByIp[probe.ip] || fallbackGeo(ctx, probe.ip) : null,
   });
 
-  const model = {
+  return {
     direct: {
       kind: 'direct',
       title: '直连',
@@ -95,26 +153,35 @@ export default async function (ctx) {
       v6: withGeo(proxy6),
     },
     network: readNetwork(ctx),
-    refreshAfter: new Date(Date.now() + refreshMinutes * 60 * 1000).toISOString(),
     updatedAt: new Date().toISOString(),
   };
+}
 
-  switch (ctx.widgetFamily) {
-    case 'accessoryInline':
-      return renderInline(model);
-    case 'accessoryCircular':
-      return renderCircular(model);
-    case 'accessoryRectangular':
-      return renderRectangular(model);
-    case 'systemSmall':
-      return renderSmall(model);
-    case 'systemLarge':
-    case 'systemExtraLarge':
-      return renderLarge(model);
-    case 'systemMedium':
-    default:
-      return renderMedium(model);
+async function prefetchOnNetworkChange(ctx, proxyPolicy) {
+  const before = readNetwork(ctx);
+  const beforeFingerprint = networkFingerprint(before);
+  const lock = readJSON(ctx, PREFETCH_LOCK_KEY);
+
+  if (
+    lock
+    && lock.fingerprint === beforeFingerprint
+    && Date.now() - Number(lock.at || 0) < PREFETCH_DEBOUNCE
+  ) {
+    return;
   }
+
+  writeJSON(ctx, PREFETCH_LOCK_KEY, {
+    at: Date.now(),
+    fingerprint: beforeFingerprint,
+  });
+
+  const snapshot = await collectSnapshot(ctx, proxyPolicy);
+  writeJSON(ctx, PREFETCH_CACHE_KEY, {
+    at: Date.now(),
+    fingerprint: networkFingerprint(snapshot.network),
+    proxyPolicy,
+    snapshot,
+  });
 }
 
 async function probePublicIp(ctx, family, policy) {
@@ -299,6 +366,31 @@ function writeGeoCache(ctx, cache) {
   }
 }
 
+function readJSON(ctx, key) {
+  try {
+    return ctx.storage ? ctx.storage.getJSON(key) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function writeJSON(ctx, key, value) {
+  try {
+    if (ctx.storage) ctx.storage.setJSON(key, value);
+  } catch (_) {
+    // Network prefetching is an optimization; rendering still works without it.
+  }
+}
+
+function networkFingerprint(network) {
+  return [
+    network.kind,
+    network.title,
+    network.interfaceName,
+    network.ipv4,
+  ].map(clean).join('|');
+}
+
 function readNetwork(ctx) {
   const device = ctx.device || {};
   const wifi = device.wifi || {};
@@ -330,7 +422,6 @@ function readNetwork(ctx) {
         ? 'antenna.radiowaves.left.and.right'
         : 'network',
     ipv4: clean(ipv4.address),
-    ipv6: clean(ipv6.address),
     interfaceName,
   };
 }
@@ -694,10 +785,9 @@ function endpointFailure(label, message) {
 }
 
 function networkCard(network) {
-  const rows = [];
-  if (network.ipv4) rows.push(networkAddressRow('内网 IPv4', network.ipv4, C.local));
-  if (network.ipv6) rows.push(networkAddressRow('接口 IPv6', network.ipv6, C.ipv6));
-  if (!rows.length) rows.push(tx('未读取到当前接口地址', 10, 'medium', C.error, 1));
+  const address = network.ipv4
+    ? networkAddressRow('内网 IPv4', network.ipv4, C.local)
+    : tx('未读取到内网 IPv4', 10, 'medium', C.error, 1);
 
   return {
     type: 'stack',
@@ -728,7 +818,7 @@ function networkCard(network) {
         alignItems: 'end',
         gap: 2,
         flex: 1.5,
-        children: rows,
+        children: [address],
       },
     ],
   };
@@ -748,7 +838,7 @@ function networkAddressRow(label, address, color) {
 }
 
 function localFooter(network, size) {
-  const addresses = [network.ipv4, network.ipv6].filter(Boolean).join(' · ');
+  const address = network.ipv4;
   return {
     type: 'stack',
     direction: 'row',
@@ -757,7 +847,7 @@ function localFooter(network, size) {
     children: [
       { type: 'image', src: 'sf-symbol:network', color: C.local, width: size, height: size },
       tx('内网', size, 'semibold', C.muted, 1),
-      { ...tx(addresses || '未获取', size, 'medium', addresses ? C.text : C.error, 1, 0.38, 'left', true), flex: 1 },
+      { ...tx(address || '未获取', size, 'medium', address ? C.text : C.error, 1, 0.38, 'left', true), flex: 1 },
       ...(network.interfaceName ? [tx(network.interfaceName, size - 1, 'regular', C.dim, 1)] : []),
     ],
   };
