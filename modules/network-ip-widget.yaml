@@ -1,5 +1,5 @@
 name: "网络出口状态"
-description: "显示直连与 Egern 当前策略的公网 IPv4/IPv6、国家省市，以及当前 Wi-Fi/蜂窝接口地址；代理无 IPv6 时自动隐藏"
+description: "显示直连与 Egern 当前策略的公网 IPv4/IPv6、国家省市，以及当前 Wi-Fi/蜂窝接口的内网 IPv4；切网时预取，代理无 IPv6 时自动隐藏"
 author: "ddkpp9"
 homepage: "https://github.com/ddkpp9/private-direct"
 
@@ -10,13 +10,17 @@ env_schema:
     default_value: ""
   refreshMinutes:
     name: 刷新间隔（分钟）
-    description: "请求系统在该时间后刷新；实际刷新时刻由 iOS 调度"
-    default_value: "10"
+    description: "定时兜底刷新；Wi-Fi/蜂窝变化时会提前更新缓存，实际显示刷新由 iOS 调度"
+    default_value: "60"
 
 scriptings:
 - generic:
     name: 网络出口状态
-    script_url: https://raw.githubusercontent.com/ddkpp9/private-direct/b81aae7301c790738a0bf38bf9df0efbafa15d67/modules/network-ip-widget.js
+    script_url: https://raw.githubusercontent.com/ddkpp9/private-direct/e259fca8a41d6a966c29b1d1ebf0fdf4adb9c80a/modules/network-ip-widget.js
+    timeout: 25
+- network:
+    name: 网络出口状态（切网预取）
+    script_url: https://raw.githubusercontent.com/ddkpp9/private-direct/e259fca8a41d6a966c29b1d1ebf0fdf4adb9c80a/modules/network-ip-widget.js
     timeout: 25
 
 widgets:
